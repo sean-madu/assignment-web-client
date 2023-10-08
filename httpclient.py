@@ -41,13 +41,13 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        return data.split(" ")[1]
 
     def get_headers(self,data):
-        return None
+        return data.split("\r\n\r\n")[0]
 
     def get_body(self, data):
-        return None
+        return data.split("\r\n\r\n")[1]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,11 +68,72 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        print(f"getting {url}")
+        port = 80
+        p_url = urllib.parse.urlparse(url)
+        host = p_url.netloc
+        if p_url.path != "/":
+            host += p_url.path
+        if p_url.query != "":
+            host += "?" + p_url.query
+        if p_url.fragment != "":
+            host += "#" + p_url.fragment
+        if p_url.scheme == "https":
+            port = 443
+
+        payload = f'GET / HTTP/1.1\r\nHost: {host}\r\n\r\n'
+
+        try:
+            self.connect(host, port)
+        except:
+            self.connect(host, port)
+            print(f"Could not connect to host: {host}")
+
+            return HTTPResponse(404, '')
+        self.sendall(payload)
+        self.socket.shutdown(socket.SHUT_WR)
+        content = self.recvall(self.socket)
+        code = self.get_code(content)
+        headers = self.get_headers(content)
+
+        if (code.startswith("3")):
+            #this is a redirect code
+            for header in headers.split("\n"):
+                if header.upper().startswith("LOCATION"):
+                    location = header.split(" ")[1]
+                    self.GET(location)
+
+        code = int(code)
+        body = self.get_body(content)
+        self.close()
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
+        port = 80
+        p_url = urllib.parse.urlparse(url)
+        """
+        host = p_url.netloc + p_url.path
+        if p_url.query != "":
+            host += "?" + p_url.query
+        if p_url.fragment != "":
+            host += "#" + p_url.fragment
+            """
+        if p_url.scheme == "https":
+            port = 443
+
+        payload = f'post {p_url.path} http/1.1\r\nHost: {p_url.netloc}\r\n\r\n' + p_url.query
+
+        host = p_url.netloc
+        print(f"Posting to host {host}")
+        try:
+            self.connect(host, port)
+        except:
+            print(f"Could not connect to host: {host}")
+            return HTTPResponse(404, '')
+        self.sendall(payload)
+        self.socket.shutdown(socket.SHUT_WR)
+        content = self.recvall(self.socket)
+        print(content)
         code = 500
         body = ""
         return HTTPResponse(code, body)
