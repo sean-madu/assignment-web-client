@@ -64,6 +64,7 @@ class HTTPClient(object):
         done = False
         while not done:
             part = sock.recv(1024)
+            print(part)
             if (part):
                 buffer.extend(part)
             else:
@@ -75,26 +76,23 @@ class HTTPClient(object):
         port = 80
         p_url = urllib.parse.urlparse(url)
         host = p_url.netloc
-        if p_url.path.endswith("/"):
-            host += p_url.path[0:len(p_url.path) - 1]
-        else:
-            host += p_url.path
+        path = p_url.path
+        if path == "":
+            path = "/"
         if p_url.query != "":
-            host += "?" + p_url.query
+            path += "?" + p_url.query
         if p_url.fragment != "":
-            host += "#" + p_url.fragment
+            path += "#" + p_url.fragment
         if p_url.scheme == "https":
             port = 443
 
-        payload = f'GET / HTTP/1.1\r\nHost: {host}\r\n\r\n'
-
+        payload = f'GET {path} HTTP/1.1\r\nHost: {host}\r\nAccept: */*\r\n\r\n'
+        print(payload)
         try:
             self.connect(host, port)
         except:
-
-            print(f"Could not connect to host: {host}")
-            self.connect(host, port)
-
+            print(f"Could not connect to host: {host} port: {port}")
+            #self.connect(host, port)
             return HTTPResponse(404, '')
         self.sendall(payload)
         self.socket.shutdown(socket.SHUT_WR)
@@ -111,6 +109,7 @@ class HTTPClient(object):
 
         code = int(code)
         body = self.get_body(content)
+        print(body)
         self.close()
         return HTTPResponse(code, body)
 
