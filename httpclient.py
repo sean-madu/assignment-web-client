@@ -23,6 +23,7 @@ import socket
 import re
 # you may use urllib to encode data appropriately
 import urllib.parse
+import ssl
 
 
 def help():
@@ -44,7 +45,11 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return data.split(" ")[1]
+        try:
+            return int(data.split("\r\n")[0].split(" ")[1])
+        except:
+            print("printing dtata")
+            print(data)
 
     def get_headers(self, data):
         return data.split("\r\n\r\n")[0]
@@ -54,6 +59,7 @@ class HTTPClient(object):
 
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
+        print(self.socket)
 
     def close(self):
         self.socket.close()
@@ -64,7 +70,6 @@ class HTTPClient(object):
         done = False
         while not done:
             part = sock.recv(1024)
-            print(part)
             if (part):
                 buffer.extend(part)
             else:
@@ -72,75 +77,51 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        print(f"getting {url}")
-        port = 80
+        code = 500
+        body = ""
         p_url = urllib.parse.urlparse(url)
-        host = p_url.netloc
+        host = p_url.hostname
+        port = p_url.port
+        if (port == None):
+            port = 80
         path = p_url.path
-        if path == "":
+        if (path == "" or path == None):
             path = "/"
-        if p_url.query != "":
-            path += "?" + p_url.query
-        if p_url.fragment != "":
-            path += "#" + p_url.fragment
-        if p_url.scheme == "https":
-            port = 443
-
-        payload = f'GET {path} HTTP/1.1\r\nHost: {host}\r\nAccept: */*\r\n\r\n'
-        print(payload)
-        try:
-            self.connect(host, port)
-        except:
-            print(f"Could not connect to host: {host} port: {port}")
-            #self.connect(host, port)
-            return HTTPResponse(404, '')
-        self.sendall(payload)
-        self.socket.shutdown(socket.SHUT_WR)
+        self.connect(host, port)
+        self.sendall(
+            f'GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n')
         content = self.recvall(self.socket)
         code = self.get_code(content)
-        headers = self.get_headers(content)
-
-        if (code.startswith("3")):
-            # this is a redirect code
-            for header in headers.split("\n"):
-                if header.upper().startswith("LOCATION"):
-                    location = header.split(" ")[1]
-                    self.GET(location)
-
-        code = int(code)
         body = self.get_body(content)
-        print(body)
         self.close()
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        port = 80
-        p_url = urllib.parse.urlparse(url)
-        """
-        host = p_url.netloc + p_url.path
-        if p_url.query != "":
-            host += "?" + p_url.query
-        if p_url.fragment != "":
-            host += "#" + p_url.fragment
-            """
-        if p_url.scheme == "https":
-            port = 443
-
-        payload = f'post {p_url.path} http/1.1\r\nHost: {p_url.netloc}\r\n\r\n' + p_url.query
-
-        host = p_url.netloc
-        print(f"Posting to host {host}")
-        try:
-            self.connect(host, port)
-        except:
-            print(f"Could not connect to host: {host}")
-            return HTTPResponse(404, '')
-        self.sendall(payload)
-        self.socket.shutdown(socket.SHUT_WR)
-        content = self.recvall(self.socket)
-        print(content)
         code = 500
         body = ""
+        p_url = urllib.parse.urlparse(url)
+        host = p_url.hostname
+        port = p_url.port
+        if (port == None):
+            port = 80
+        path = p_url.path
+        if (path == "" or path == None):
+            path = "/"
+
+        query = None
+        if args == None:
+            query = ""
+        else:
+            query = "&"
+            for k, v in args.items():
+                query += k + "=" + v + "&"
+        self.connect(host, port)
+        self.sendall(
+            f'POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {len(query)}\r\nConnection: close\r\n\r\n{query}')
+        content = self.recvall(self.socket)
+        code = self.get_code(content)
+        body = self.get_body(content)
+        self.close()
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
